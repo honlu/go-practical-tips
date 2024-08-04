@@ -6,6 +6,9 @@
     - [3. 使用context.WithoutCancel 保持 context 活跃](#3-使用contextwithoutcancel-保持-context-活跃)
     - [4. 使用context.AfterFunc设置取消context后调度函数](#4-使用contextafterfunc设置取消context后调度函数)
     - [5. 使用未导出的空结构体(struct{})作为context key](#5-使用未导出的空结构体struct作为context-key)
+    - [6. 处理延迟调用的错误以防止忽视错误](#6-处理延迟调用的错误以防止忽视错误)
+    - [7. 始终跟踪goroutine的生命周期](#7-始终跟踪goroutine的生命周期)
+
 
 
 ## Context
@@ -315,7 +318,96 @@ func handleRequest(ctx context.Context){
 
 当然，在某些情况下，你仍然可以使用具有基础元类型的类型定义：
 
-*在编写业务逻辑时使用context值可能很棘手。因为它隐式传递数据，所以它不是编译性安全，可能难以跟踪和调试。*
+*在编写业务逻辑时使用context值可能很棘手。因为它隐式传递数据，所以存在编译性安全问题，可能难以跟踪和调试。*
+
+### 6. 处理延迟调用的错误以防止忽视错误
+
+在延迟调用中很容易忽视错误处理，这可能让我们陷入困境：
+
+```go
+func doSomething() error{
+	file, err := os.Open("file.txt")
+	if err != nil{
+		return err
+	}
+	defer file.Close()
+	
+	...
+}
+```
+
+在这段代码中如果关闭文件失败，可能是因为某些内容未正确写入或文件系统中存在故障。如果我们不检查该错误，那么我就错过了捕获和处理潜在关键问题的机会。
+
+如果我们现在坚持使用defer，我们基本上有三种方法来处理它：
+
+- 我们可以将错误作为函数返回的一部分进行处理。
+- 我们可以让程序panic，这可能有点严重。除非它是一个真正严重的错误，足以证明程序奔溃是合理的。
+- 或者我们可以只是记录错误并继续。这很简单但意味着你没有主动处理错误，只是注意它发生了。
+
+但是如果将其作为函数错误处理呢？这是有点差异的。我们可以使用命名返回值来巧妙管理它：
+
+```
+func DoSomething(path string)(err error){
+	file, err := os.Open(path)
+	if err != nil{
+		return err
+	}
+	
+	defer func(){
+		if cerr := file.Cloes(); cerr != nil{
+			err = errors.Join(err, cerr)
+		}
+	}()
+	
+	...
+}
+```
+
+在此版本中，使用命名的返回变量err作为函数的错误返回。
+
+在延迟函数内，检查file.Close()是否返回错误（捕获为cerr）。如果确实如此，我们使用errors.Join将其与可能已经存在的任何现有错误合并（而不是wrap）。这样，该函数可以返回反映文件打开和文件关闭操作问题的错误。
+
+或者，代码简化一下：
+
+```go
+defer func(){
+	err = errors.Join(err, file.Close())
+}()
+```
+
+简化版本质上做同样的事情，但将其压缩为defer内的一行。现在，即使是这种较短的方法，也会因为匿名函数而增加一些复杂性，因为匿名函数增加了嵌套，会使代码更难理解。
+
+实际上，还有另外一种方法可以使用简洁的辅助函数来处理延迟调用的错误：
+
+```go
+defer closeWithError(&err, file.Close)   // 注：原文这里file传入，译者改为file.Close
+
+func closeWithError(err *error, f func() error) {
+    *err = errors.Join(*err, f())
+}
+```
+
+> "等等，这不会因为err为nil时*err而导致panic吗？"
+
+这是合理的担忧，但问题在于：它实际上运行的很好。
+
+原因如下：在Go中，error是一个interface{}，并且nil error的行为方式与nil指针其他类型（例如*int）的行为不同。
+
+一个nil error在内部标识为{type = nil, value = nil},但准确地说他仍然是一个有效的、可用的值（interface接口的零值）。
+
+所以当我们在defer closeWithError(&err, file.Close)调用中使用&err时，我们并不是在处理nil指针场景。我们实际上得到的是一个指向interface变量的指针，该变量本身保存着{type=nil, value=nil}.
+
+这意味着在closeWithError函数中，当我们使用*err间接引用错误指针以分配新值时，我们不会因为间接引用nil指针（这可能导致panic）。相反，我们正在做的是通过接口interface变量的指针修改其值。这是一个安全的操作，可以避免你猜测的panic。
+
+此解决方案的灵感来自[David Nix (@davidnix_) / X](https://x.com/davidnix_)
+
+### 7. 始终跟踪goroutine的生命周期
+
+
+
+
+
+
 
 
 
