@@ -8,8 +8,7 @@
     - [5. 使用未导出的空结构体(struct{})作为context key](#5-使用未导出的空结构体struct作为context-key)
     - [6. 处理延迟调用的错误以防止忽视错误](#6-处理延迟调用的错误以防止忽视错误)
     - [7. 始终跟踪goroutine的生命周期](#7-始终跟踪goroutine的生命周期)
-
-
+    - [8. 避免使用time.Sleep()，它不是context感知的并且不能被中断](#8-避免使用timesleep它不是context感知的并且不能被中断)
 
 ## Context
 
@@ -403,9 +402,83 @@ func closeWithError(err *error, f func() error) {
 
 ### 7. 始终跟踪goroutine的生命周期
 
+Goroutines是堆栈式的，这意味着它们比其他语言中类似结构占用更多的内存，每个至少2kb，虽然很小但不可忽略。
 
+每次使用 `go doSomething()`启动goroutine时，都会立即保留2kb内存（在Go1.2中为4kb，在Go1.4中增加到8kb）。
 
+因此，缺点是当你的Go程序同时处理很多事情时，与没有这种堆栈分配的语言相比，它的内存使用量会增长得更快。
 
+这个初始大小是一个起点，Go runtime(运行时) 会在执行过程中自动调整 goroutines的堆栈大小，以适应每个goroutine工作负载的内存需求。
+
+这个过程是这样的：当goroutine的堆栈达到其当前限制时，Go runtime(运行时) 会检测到这种情况并分配更大的堆栈空间。然后，它将现有堆栈的内容复制到新的、更大的堆栈（stack），并使用这个扩展的堆栈空间继续goroutine的执行。
+
+我个人遇到过使用一堆带有for循环和time.Sleep的goroutine的情况，如下所示：
+
+```go
+func Job(d time.Duration){
+    for ;; time.Sleep(d){
+        ...
+    }
+}
+```
+
+```go
+for Job(d time.Duration){
+    for{
+        ...
+        time.Sleep(d)
+    }
+}
+```
+
+这样写看起来很方便，但它有着缺点。
+
+当我们谈论优雅地关闭你的应用程序时，正如我们在本主题**“优雅地关闭你的应用程序”**（译者注：在后文中，还未翻译）部分中概述的那样，我们遇到某些功能的棘手问题，例如`time.Sleep`，它本质上不能很好地支持优雅关闭。
+
+- Sleep -> SIGTERM -> Running -> Interrupted
+  - 睡眠 -> sigterm -> 运行 -> 终端
+
+（译者注，此处有个超链接，是下一篇待翻译内容）
+
+因此，对于不会自然结束的任务，例如提供网络连接或监视配置文件，最好使用取消信号（cancellation signals）或条件来明确定义这些任务何时应停止。
+
+```go
+func Job(ctx context.Context, d time.Duration){
+    for{
+        select{
+        case <- ctx.Done():
+            return
+        default:
+            ...
+            time.Sleep(d)
+        }
+    }
+}
+```
+
+在此设置中，context应从一个base context派生，当收到SIGTERM时，该上下文将被取消。这样，至少我们知道任务不会被意外终端，即使是在程序终止时。
+
+但这并不能完全解决问题，如果需要随时停止goroutine怎么办呢？这在下一篇中讨论。
+
+现在，考虑另一种情况，其中goroutine可能会永远卡住：
+
+```go
+func Worker(jobs <-chan int){
+    for i := range jobs{
+        ...
+    }
+}
+jobs := make(chan int)
+go worker(jobs)
+```
+
+你可能认为确认routine何时结束很简单，只需关闭jobs channel即可。
+
+但jobs channel到底什么时候关闭呢？如果出现错误并且我们没有`close` channel 并从函数返回，则goroutine会无限期挂起，从而导致内存泄漏。
+
+因此，明显知道goroutine何时启动和停止，并将context传递到长时间运行的进程中，这是很重要的。
+
+### 8. 避免使用time.Sleep()，它不是context感知的并且不能被中断
 
 
 
