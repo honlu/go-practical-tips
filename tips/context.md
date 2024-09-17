@@ -1,16 +1,13 @@
-# Go实用技巧
-- [Go实用技巧](#go实用技巧)
-  - [Context](#context)
-    - [1. 为了goroutines更可靠，避免使用context.Background()](#1-为了goroutines更可靠避免使用contextbackground)
-    - [2. 不幸得是，context.Value 不是我们的朋友](#2-不幸得是contextvalue-不是我们的朋友)
-    - [3. 使用context.WithoutCancel 保持 context 活跃](#3-使用contextwithoutcancel-保持-context-活跃)
-    - [4. 使用context.AfterFunc设置取消context后调度函数](#4-使用contextafterfunc设置取消context后调度函数)
-    - [5. 使用未导出的空结构体(struct{})作为context key](#5-使用未导出的空结构体struct作为context-key)
-    - [6. 处理延迟调用的错误以防止忽视错误](#6-处理延迟调用的错误以防止忽视错误)
-    - [7. 始终跟踪goroutine的生命周期](#7-始终跟踪goroutine的生命周期)
-    - [8. 避免使用time.Sleep()，因为它不能被context感知和被中断](#8-避免使用timesleep因为它不能被context感知和被中断)
-    - [9. 实现感知context的Sleep函数](#9-实现感知context的sleep函数)
-  - [并发和同步](#并发和同步)
+- [Context](#context)
+  - [1. 为了goroutines更可靠，避免使用context.Background()](#1-为了goroutines更可靠避免使用contextbackground)
+  - [2. 不幸得是，context.Value 不是我们的朋友](#2-不幸得是contextvalue-不是我们的朋友)
+  - [3. 使用context.WithoutCancel 保持 context 活跃](#3-使用contextwithoutcancel-保持-context-活跃)
+  - [4. 使用context.AfterFunc设置取消context后调度函数](#4-使用contextafterfunc设置取消context后调度函数)
+  - [5. 使用未导出的空结构体(struct{})作为context key](#5-使用未导出的空结构体struct作为context-key)
+  - [6. 处理延迟调用的错误以防止忽视错误](#6-处理延迟调用的错误以防止忽视错误)
+  - [7. 始终跟踪goroutine的生命周期](#7-始终跟踪goroutine的生命周期)
+  - [8. 避免使用time.Sleep()，因为它不能被context感知和被中断](#8-避免使用timesleep因为它不能被context感知和被中断)
+  - [9. 实现感知context的Sleep函数](#9-实现感知context的sleep函数)
 
 
 ## Context
@@ -707,17 +704,3 @@ func Job(context.Context){
 ```
 
 这样，该函数就更容易使用并集成到各个需要感知context停止的代码部分中。
-
-## 并发和同步
-
-（context更新完毕，接下来更新Concurrency & Synchronization）
-
-
-
-
-
-
-
-
-
-> **未完待翻译，感兴趣可以先看原仓库英文版** 
