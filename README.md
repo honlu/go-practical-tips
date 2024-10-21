@@ -1,16 +1,16 @@
-# Go实用技巧
-- [Go实用技巧](#go实用技巧)
-  - [Context](#context)
-    - [1. 为了goroutines更可靠，避免使用context.Background()](#1-为了goroutines更可靠避免使用contextbackground)
-    - [2. 不幸得是，context.Value 不是我们的朋友](#2-不幸得是contextvalue-不是我们的朋友)
-    - [3. 使用context.WithoutCancel 保持 context 活跃](#3-使用contextwithoutcancel-保持-context-活跃)
-    - [4. 使用context.AfterFunc设置取消context后调度函数](#4-使用contextafterfunc设置取消context后调度函数)
-    - [5. 使用未导出的空结构体(struct{})作为context key](#5-使用未导出的空结构体struct作为context-key)
-    - [6. 处理延迟调用的错误以防止忽视错误](#6-处理延迟调用的错误以防止忽视错误)
-    - [7. 始终跟踪goroutine的生命周期](#7-始终跟踪goroutine的生命周期)
-    - [8. 避免使用time.Sleep()，因为它不能被context感知和被中断](#8-避免使用timesleep因为它不能被context感知和被中断)
-    - [9. 实现感知context的Sleep函数](#9-实现感知context的sleep函数)
-  - [并发和同步](#并发和同步)
+- [Context](#context)
+  - [1. 为了goroutines更可靠，避免使用context.Background()](#1-为了goroutines更可靠避免使用contextbackground)
+  - [2. 不幸得是，context.Value 不是我们的朋友](#2-不幸得是contextvalue-不是我们的朋友)
+  - [3. 使用context.WithoutCancel 保持 context 活跃](#3-使用contextwithoutcancel-保持-context-活跃)
+  - [4. 使用context.AfterFunc设置取消context后调度函数](#4-使用contextafterfunc设置取消context后调度函数)
+  - [5. 使用未导出的空结构体(struct{})作为context key](#5-使用未导出的空结构体struct作为context-key)
+  - [6. 处理延迟调用的错误以防止忽视错误](#6-处理延迟调用的错误以防止忽视错误)
+  - [7. 始终跟踪goroutine的生命周期](#7-始终跟踪goroutine的生命周期)
+  - [8. 避免使用time.Sleep()，因为它不能被context感知和被中断](#8-避免使用timesleep因为它不能被context感知和被中断)
+  - [9. 实现感知context的Sleep函数](#9-实现感知context的sleep函数)
+- [Concurrency \& Synchronization并发和同步](#concurrency--synchronization并发和同步)
+  - [1. Goroutines之间的信号传递，优先选择`chan struct{}`而不是`chan bool`](#1-goroutines之间的信号传递优先选择chan-struct而不是chan-bool)
+
 
 
 ## Context
@@ -708,13 +708,70 @@ func Job(context.Context){
 
 这样，该函数就更容易使用并集成到各个需要感知context停止的代码部分中。
 
-## 并发和同步
+## Concurrency & Synchronization并发和同步
 
-（context更新完毕，接下来更新Concurrency & Synchronization）
+### 1. Goroutines之间的信号传递，优先选择`chan struct{}`而不是`chan bool`
 
+当使用goroutines时，需要在它们之间发信号，我们可能需要知道选择使用`chan bool` 还是`chan strcut{}`.
 
+> 为什么更倾向于`chan struct{}`?
 
+`chan bool`也可以发出信号。它发送的是布尔值true或false, 值可能带有特定的含义，具体取决于自己的配置。但这就是棘手的地方：
 
+```go
+type JobDispatcher struct{
+    start chan bool
+}
+
+func NewJobDispatcher() *JobDispatcher{
+    return &JobDispatcher{
+        start: make(chan bool),
+    }
+}
+// Unclear: What does sending true or false mean?
+```
+
+当你使用它时，可能会感到困惑。
+
+比如，你将true给start字段？true意味着停止吗？它并不是清晰的，当其他人试图弄清楚你的代码时，甚至过待时间你再看它是，可能会导致一些停顿。
+
+现在，我们来谈谈`chan struct{}`,这种类型纯粹用于发信号，因为`struct{}`类型根本不占用任何内存，就像在说“嘿，发生了一些事情”。而不发送任何实际数据。
+
+```go
+type JobDispatcher struct{
+    start chan struct{}
+}
+
+func NewJobDispatcher() *JobDispatcher{
+    return &JobDispatcher{
+        start: make(chan start{}),
+    }
+}
+
+func (j *JobDispatcher) Start(){
+    j.start <- struct{}{}
+}
+// Clear: Sending anything means "start the job"
+```
+
+这里的主要优点是什么呢？
+
+- 首先，由于`struct{}`大小为零，因此给`chan struct{}`发送值实际上不会在通道中移动任何数据，它只是信号。这是一个微妙但很好的内存优化。
+- 当开发人员在代码中看到`chan struct{}`时，立即清楚该通道用于发送信号，从而减少混乱.
+
+缺点是什么呢?
+
+- 这有点笨拙的`struct{}{}`语法，但这种小小不变非常值得。因为当你想要的只是一个简单的信号时，它可以防止通道被滥用于传输数据。
+
+对于一次性信号，你甚至可能不需要发送值。你可以关闭频道：
+
+```go
+func(j *JobDispatcher) Start(){
+    close(j.start)
+}
+```
+
+关闭通道是一种明确而有效向多个接收器发出信号的方法，二不许发送任何数据表明工作开始。
 
 
 
