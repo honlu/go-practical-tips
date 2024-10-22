@@ -10,6 +10,7 @@
   - [9. 实现感知context的Sleep函数](#9-实现感知context的sleep函数)
 - [Concurrency \& Synchronization并发和同步](#concurrency--synchronization并发和同步)
   - [1. Goroutines之间的信号传递，优先选择`chan struct{}`而不是`chan bool`](#1-goroutines之间的信号传递优先选择chan-struct而不是chan-bool)
+  - [2. 缓冲channel作为信号量来限制Goroutine执行](#2-缓冲channel作为信号量来限制goroutine执行)
 
 
 
@@ -773,7 +774,75 @@ func(j *JobDispatcher) Start(){
 
 关闭通道是一种明确而有效向多个接收器发出信号的方法，二不许发送任何数据表明工作开始。
 
+### 2. 缓冲channel作为信号量来限制Goroutine执行
 
+当我们想要控制多个goroutine可以同时访问特定资源时，使用信号量是一个不错的选择。我们可以简单的使用Go中的缓冲通道创建信号量。
+
+通道的大小决定了可以同时运行的goroutine的数量：
+
+```go
+semaphore := make(chan struct{}, numTokens)
+```
+
+基本流程人如下：
+
+- Goroutine尝试向通道发送一个值，占用一个可用槽。
+- 一旦goroutine完成其任务，它就会从通道中删除该值，从而释放该槽位以供另一个goroutine使用。
+
+```go
+var wg sync.WaitGroup
+wg.Add(10)
+
+for i := 0; i < 10; i++{
+    go func(id int){
+        defer wg.Done()
+        semaphore <-struct{}{} // Acquire a token
+        ...
+        <-semaphore  // Release the token.
+    }(i)
+    
+    wg.Wait()
+}
+```
+
+在这个代码片段中：
+
+- wg.Add(10): 设置10个goroutine.
+- make(chan struct{}, 3): 初始化一个信号量，只允许3个goroutine同时运行。
+
+如果你正在寻找一种更结构化的方式，我们可以定义一个Semaphore类型来封装所有与信号量相关的操作：
+
+```go
+type Semaphore chan struct{}
+
+func NewSemaphore(maxCount int) Semaphore{
+    return make(chan struct{}, maxCount)
+}
+
+func(s Semaphore) Acquire(){
+    s <- struct{}{}
+}
+
+func(s Semaphore) Release(){
+    <-s
+}
+```
+
+使用这种自定义封装的信号类型可以简化管理资源访问的方式：
+
+```go
+func doSomething(semaphore *Semaphore){
+    semaphore.Acquire()
+    defer semaphore.Release()
+    ...
+}
+```
+
+此外，对于更复杂的场景，你看需要查看http://golang.org/x/sync/semaphore包，它提供了一个加权信号量实现。
+
+当某些任务可能需要比其它任务更多的资源时，这特别有用，例如管理数据库连接池，其中某些操作同时需要多个连接。
+
+加权信号量允许的那个goroutine一次消耗多个槽。
 
 
 
