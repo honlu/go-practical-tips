@@ -198,3 +198,59 @@ func Func2() error {
 这种方法暗示错误之间存在一连串的依赖关系，这并不准确，因为这些错误是同时发生的，而不是按顺序发生的。
 
 相反，在这种情况下使用 `errors.Join` 会更合理。
+
+### 错误消息不应首字母大写或以标点符号结尾
+
+你可能会想知道为什么Go语言中的错误消息不应以大写字母开头或以标点符号结尾。乍一看可能有些奇怪，但其中有实际原因。
+
+在 Go 中处理错误消息时，它们经常会被折行或与其他消息合并。想象一下，一个以大写字母开头的错误消息出现在另一个句子的中间，看起来会非常突兀。 
+
+以下是一个示例，以说明我的意思：
+
+```go
+func openDatabase() error {
+    return fmt.Errorf("Could not open the database.")
+}
+
+func initModule() error {
+    return fmt.Errorf("Initialize module: %w.", openDatabase())
+}
+
+func startApp() error {
+    return fmt.Errorf("Application startup failed: %w.", initModule())
+}
+
+func main() {
+    fmt.Println(startApp().Error())
+}
+
+// Output: Application startup failed: Initialize module: Could not open the database...
+```
+
+注意每个部分都以大写字母开头吗？这会打断阅读节奏，让整个错误信息看起来有些别扭。现在，如果我们用小写字母开头，整体看起来就协调多了：
+
+```go
+func openDatabase() error {
+    return fmt.Errorf("could not open the database")
+}
+
+func initModule() error {
+    return fmt.Errorf("initialize module: %w", openDatabase())
+}
+
+func startApp() error {
+    return fmt.Errorf("application startup failed: %w", initModule())
+}
+
+func main() {
+    fmt.Println(startApp().Error())
+}
+
+// Output: application startup failed: initialize module: could not open the database
+```
+
+这样一来，句子读起来更像是一个连续的句子，而不是零散、别扭的片段。
+
+> “为什么没有标点符号？”
+
+再看看第一个例子，你会发现它以省略号（...）结尾，看起来有点奇怪。这是因为当你在`%w`之后添加标点符号时，`fmt.Errorf`会自动以这种方式格式化它。
