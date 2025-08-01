@@ -2140,12 +2140,12 @@ For a more visual understanding, let's look at how A is laid out internally, whi
 
 <div align="center">
 
-|0|1|2|3|4|5|6|7|
-|-|-|-|-|-|-|-|-|
-|A| | | |B|B|B|B|
-|C| | | | | | | |
-|D|D|D|D|D|D|D|D|
-|E| | | | | | | |
+| 0   | 1   | 2   | 3   | 4   | 5   | 6   | 7   |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| A   |     |     |     | B   | B   | B   | B   |
+| C   |     |     |     |     |     |     |     |
+| D   | D   | D   | D   | D   | D   | D   | D   |
+| E   |     |     |     |     |     |     |     |
 
 </div>
 
@@ -2159,10 +2159,10 @@ The way that the fields in OptimizedA are structured is pretty clever in terms o
 
 <div align="center">
 
-|0|1|2|3|4|5|6|7|
-|-|-|-|-|-|-|-|-|
-|D|D|D|D|D|D|D|D|
-|B|B|B|B|A|C|E| |
+| 0   | 1   | 2   | 3   | 4   | 5   | 6   | 7   |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| D   | D   | D   | D   | D   | D   | D   | D   |
+| B   | B   | B   | B   | A   | C   | E   |     |
 
 </div>
 
