@@ -309,3 +309,72 @@ processFileContent(content)
 例如，Go 标准库中的某些函数，如“strings”包中的函数，会使用这些特殊值来表示特定结果，这可以使字符串操作更加简洁。
 
 但这也意味着你需要具备领域知识，理解这些特殊值的使用场景及其含义，例如 `io.EOF` 在 `io` 包中的用法。
+
+### 单点错误处理： 减少「错误处理」的噪音
+
+让我们深入了解一下单点错误处理，它可以减少不必要的噪音。我们有几个函数，A 和 B，它们是这样设置的：
+
+```go
+func B() error {
+    if err := doSomething(); err != nil {
+        log.Printf("failed do something: %v", err)
+        return err
+    }
+
+    return nil
+}
+
+func A() error {
+    if err := B(); err != nil {
+        log.Printf("unable to call B: %v", err)
+        return err
+    }
+
+    return nil
+}
+```
+
+在这段代码中，当 B 遇到问题时，记录日志并返回错误给A。然后 A 收到这个错误后，又再打一遍日志，可能还继续往上返回。
+
+> “这不挺好的？多点日志能追踪啊！”
+
+你可能认为这很安全，在多个点上记录错误，实则制造了大量噪音和混乱。
+
+下面就是为什么这会产生问题：
+
+- 日志重复： 同一个错误在多个地方被重复打印，日志一眼望去全是 error，看不出哪个是真源头。
+- 错误处理逻辑变复杂： 这会你不知道哪层该打日志，哪层该返回，每层都在 log，一旦报错像“炸弹”一样层层响。
+- 容易引入其他问题： 多层 log 和 return 逻辑容易遗漏或处理错误，比如忘记包装错误，日志信息不一致等。
+
+单点错误处理的理念非常简单：每个错误只应该在一个明确的位置被处理（记录/修复/返回）一次。
+
+更好的解决方案：
+- 明确你的选择：要么处理错误，要么往上传递，别又打日志又返回，又啰嗦又乱。
+- 如果是向上传递，那么添加更多上下文通常是个好主意，这样可以帮助最终处理该错误的人了解错误出在哪里。
+
+```go
+func B() error {
+    if err := doSomething(); err != nil {
+        return fmt.Errorf("do something: %w", err)
+    }
+
+    return nil
+}
+
+func A() error {
+    if err := B(); err != nil {
+        return fmt.Errorf("call B: %w", err)
+    }
+
+    return nil
+}
+
+// Centralized error logging when calling A
+if err := A(); err != nil {
+    log.Printf("failed to do A: %v", err)
+}
+```
+
+在这种情况下，A 和 B 都不会记录日志。相反，它们会用额外的上下文来包裹错误并将其传递上去。
+
+真正的日志只发生一次，在调用函数 `A` 的最高层。在这里，你可以决定如何处理这个错误，也许是记录它，也许是`panic`，也许是采取一些纠正措施。
