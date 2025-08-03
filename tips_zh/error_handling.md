@@ -378,3 +378,37 @@ if err := A(); err != nil {
 在这种情况下，A 和 B 都不会记录日志。相反，它们会用额外的上下文来包裹错误并将其传递上去。
 
 真正的日志只发生一次，在调用函数 `A` 的最高层。在这里，你可以决定如何处理这个错误，也许是记录它，也许是`panic`，也许是采取一些纠正措施。
+
+### 使用 `fmt.Errorf` 时简化错误信息
+
+在 Go 中记录错误时，确保错误日志的细节准确至关重要，方便知道发生什么问题。
+
+_[用`fmt.Errorf明确表达错误，不要返回光秃秃的错误值`](#用-fmterrorf-明确表达错误不要返回光秃秃的错误值)_
+
+我们都知道如何使用 `fmt.Errorf` 和 `%w` 格式化错误来保持错误链的完整性：
+
+```go
+if err != nil {
+    return fmt.Errorf("failed to open file %s: %w", filename, err)
+}
+```
+
+但现实是：有时我们的错误信息会变成一小段故事: " **error while** crawling: **can't** retrieve log: **failed to** open file server-logs.txt: file not exist." 虽然这些信息有用，但有点冗长。
+
+我们重复 "error while" 和 "failed to" 短语, 坦白说我们当然知道它是一个错误。
+
+这里有个更简洁的处理方式：
+
+```go
+if err != nil {
+    return fmt.Errorf("open file %s: %w", filename, err)
+}
+```
+
+看看不同之处，替换冗长的错误信息，现在是 _"crawling: retrieve log: open file server-logs.txt: file not exist."_ 这样简洁明了，易于阅读和直奔主题。
+
+因此，在Go中编写错误信息时，请务必保持简洁，重点说明哪些操作没有成功。
+
+这种方式，不仅仅代码清晰、简短，还让后来读日志的人员更舒适。
+
+个人而言，我更喜欢在错误日志信息中保留 "failed" 或否定词，但不包含错误内容，具体选择取决于团队的实际需求。
