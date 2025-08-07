@@ -53,3 +53,53 @@ b = append(b, 1) // [1]
     - 少走扩容逻辑，减少内存分配次数。
     - 提高性能，尤其在大量数据操作时更明显。
     - 防止逻辑错误（比如前面多出一堆 0）。
+
+### 优先使用 `strconv` 而不是 `fmt` 进行字符串转换
+
+在 Go 语言中，将数字转换为字符串时，选择合适的工具对性能影响显著。你可能会考虑使用 `fmt.Sprint`，但让我们来探讨为何 `strconv` 可能是完成此任务的更佳选择。
+
+`strconv` 包专为字符串转换而设计，这意味着它针对将数字转换为字符串等任务进行了优化。在处理大规模应用程序时，每一点性能提升和内存节省都至关重要。
+
+为了让你更清楚地了解，让我们看看 `fmt` 和 `strconv` 之间的简单基准测试比较：
+
+```go
+func BenchmarkFmt(b *testing.B) {
+    for i := 0; i < b.N; i++ {
+        _ = fmt.Sprint(i)
+    }
+}
+
+func BenchmarkStrconv(b *testing.B) {
+    for i := 0; i < b.N; i++ {
+        _ = strconv.Itoa(i)
+    }
+}
+```
+
+当我们运行这些基准测试时，看看性能差异：
+
+```shell
+BenchmarkFmt-8      23821753    50.17 ns/op    16 B/op  2 allocs/op
+BenchmarkStrconv-8  100000000   11.47 ns/op     3 B/op  1 allocs/op
+```
+
+_(不确定编译器是否进行了任何优化，但两者的上下文是相同的)_
+
+如您所见，`strconv.Itoa` 在内存分配方面比 `fmt.Sprint` 显著更快且更高效，但这是为什么呢？
+
+- `strconv.Itoa(..)` 专门设计用于将整数转换为字符串，这种专业化使其比更通用的 `fmt` 函数执行得更快。
+- 另一方面，`fmt.Sprint` 及其变体需要进行一些额外的工作，它们使用反射来理解正在处理的数据类型，并确定将其格式化为字符串的最佳方式。
+
+```go
+func (p *pp) doPrint(a []any) {
+	prevString := false
+	for argNum, arg := range a {
++		isString := arg != nil && reflect.TypeOf(arg).Kind() == reflect.String
+		...
++		p.printArg(arg, 'v') 
+		...
+	}
+}
+```
+
+这个反射过程并非免开销的，它会增加时间和内存开销，当处理大量数据或需要高性能时，这些开销可能会相当显著。
