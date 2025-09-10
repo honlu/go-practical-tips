@@ -280,3 +280,76 @@ for _, file := range files {
 ```
 
 我们可以把这个功能单独抽出来写成一个命名函数，或者在**权衡利弊后**决定不要使用 defer（请记住，即使发生panic，defer仍会执行，这在某些情况下可以作为安全保护机制）。
+
+### 使用 `strings.EqualFold` 实现不区分大小写的字符串比较
+
+若需进行不区分大小写的字符串比较，我们可能首先考虑使用 `strings.ToLower()` 将两个字符串完全转换为小写，或使用 `strings.ToUpper()` 转换为大写，然后进行比较：
+
+```go
+if strings.ToLower(a) == strings.ToLower(b) {
+    ...
+}
+```
+
+但Go语言提供了一种更简单高效的大小写不敏感字符串比较方法：`strings.EqualFold`。
+
+该函数专为这类比较设计，提供了更优化的解决方案：
+
+```go
+if strings.EqualFold(a, b) {
+    ...
+}
+```
+
+倾向于使用`strings.EqualFold`不仅因为其简洁性。它专门针对不区分大小写的比较进行了优化，不仅简化了代码，还显著提升了性能。
+
+> “strings.EqualFold 的速度是否快于先调用 ToLower 再进行比较？”
+
+是的，它绝对更快。
+
+通过对比性能数据可以明确看出，`strings.EqualFold` 不仅操作简洁，更具备显著效率优势：
+
+```bash
+BenchmarkToLower-8      29140400    40.67 ns/op     8 B/op  1 allocs/op
+BenchmarkEqualFold-8    208766617   5.718 ns/op     0 B/op  0 allocs/op
+```
+
+该函数不仅实现字符大小写转换，
+
+更兼顾Unicode的复杂性，确保跨语言比较的准确性：
+
+```go
+strings.EqualFold("Σ", "σ")           // true
+strings.EqualFold("RESUMÉ", "resumé") // true
+```
+
+其工作原理如下：
+
+- 快速路径：逐个快速检查ASCII字符。
+- 慢速路径：若发现Unicode字符，则切换至详细比较模式以准确处理此类字符。
+
+_例如上文仍可使用`strings.ToLower`或`strings.ToUpper`，它们均能良好处理Unicode字符。_
+
+目前尚不完全适用，某些场景下`strings.EqualFold`可能存在局限，例如：
+
+```go
+s1 := "Resumé" // 普通'é'字符
+s2 := "resume\u0301" // 'e'后接a combining acute accent
+```
+
+虽然字符外观相似，但编码方式不同。
+
+此类情况下仅用`strings.EqualFold`可能不足，需结合更精细的处理机制，可参考[标准化技术](https://golang.org/x/text/unicode/norm)：
+
+```go
+import "golang.org/x/text/unicode/norm"
+
+s1 := "Resumé"       // Normal 'é'
+s2 := "resume\u0301" // 'e' followed by a combining acute accent
+
+s1Normalized := norm.NFC.String(s1)
+s2Normalized := norm.NFC.String(s2)
+
+fmt.Println(s1Normalized == s2Normalized)                  // 输出：false
+fmt.Println(strings.EqualFold(s1Normalized, s2Normalized)) // 输出：true
+```
