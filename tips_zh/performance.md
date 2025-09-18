@@ -353,3 +353,54 @@ s2Normalized := norm.NFC.String(s2)
 fmt.Println(s1Normalized == s2Normalized)                  // 输出：false
 fmt.Println(strings.EqualFold(s1Normalized, s2Normalized)) // 输出：true
 ```
+
+### 无需分配内存的过滤方法
+
+在Go语言中过滤切片时，通常需要创建一个新切片来存放过滤后的元素。然而这种方法会导致额外的内存分配：
+
+```go
+var filtered []int
+
+for _, v := range numbers {
+    if isOdd(v) {
+        filtered = append(filtered, v)
+    }
+}
+```
+
+但存在更优雅的处理方式：通过“就地”过滤切片，直接利用原始切片的底层数组避免额外分配。
+
+无需新建切片，只需将 filtered 设置为零长度切片，使其与 numbers 共享同一底层数组：
+
+```go
+filtered := numbers[:0]
+```
+
+此设置意味着`filtered`初始无元素，但使用与`numbers`相同的底层数组。
+
+```go
+for _, v := range numbers {
+    if isOdd(v) {
+        filtered = append(filtered, v)
+    }
+}
+```
+
+关键点在于：我们并未实际分配新内存，而是填充了`numbers`原本引用的现有数组。因此`filtered`和`numbers`都会反映变更，但仅限于添加到`filtered`的最后一个元素：
+
+```go
+numbers := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
+
+// 
+filtered: [1 3 5 7 9]
+numbers: [1 3 5 7 9 6 7 8 9]
+```
+
+当满足以下条件时，此方法尤为实用：
+
+- 过滤后无需保留原始数组，可接受修改原始数组
+- 处理大规模数据集且性能至关重要（因该方法通过避免创建额外切片来最小化内存占用）
+
+> 提醒：
+> 如果 append 后切片长度未超过容量，append 会修改共享的底层数组，影响原切片。
+> 如果 append 导致扩容（长度超过容量），则会分配新的底层数组，原切片不会被修改。
